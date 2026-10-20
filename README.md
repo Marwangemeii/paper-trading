@@ -3,7 +3,8 @@
 A miniature paper-trading platform: trade crypto pairs with virtual money against **live prices**.
 .NET 10 backend (matching simulator, portfolio, REST + SignalR) · React frontend (English/Arabic) · Docker · GitHub Actions · Azure.
 
-> **Live demo:** _see "Deployment status" below_ · **API test page:** `<api-url>/scalar`
+> **Live demo:** https://ambitious-stone-0339e7400.2.azurestaticapps.net
+> **API test page:** https://ca-paper-trading-api.thankfulgrass-5425d485.northeurope.azurecontainerapps.io/scalar
 
 ---
 
@@ -211,12 +212,13 @@ multiples via `BigInt`), portfolio and history, English/Arabic with `dir="rtl"` 
 | API | **Container Apps** (consumption) | **min = max = 1 replica** (single writer), external ingress on port 8080 |
 | Image | **Azure Container Registry (Basic)** | Built with `az acr build`; pulled by the app's managed identity |
 | Logs | Log Analytics | Created with the Container Apps environment |
-| Region | **West Europe** | Binance market data is blocked from some regions (e.g. US) |
+| Region | **North Europe** (API, registry) | Binance market data is blocked from some regions (e.g. US); West Europe was not accepting new trial subscriptions |
 
 ### Pipeline (`.github/workflows/ci-cd.yml`)
 1. **CI on every push/PR:** backend build + all tests (results uploaded), frontend lint + build.
 2. **CD on `main`** (only after CI passes): Azure login via **OIDC federated credentials** (no Azure password or key stored
-   anywhere), `az acr build` the API image tagged with the commit SHA, `az containerapp update` to roll out the new
+   anywhere), build the API image on the runner and push it to ACR tagged with the commit SHA (`az acr login` uses the
+   same Entra ID token; ACR Tasks are not available on trial subscriptions), `az containerapp update` to roll out the new
    revision, build the web app with the API URL and upload it to Static Web Apps.
 
 ### No secrets in source
@@ -232,7 +234,9 @@ RG=rg-paper-trading; LOC=westeurope; ACR=<unique-acr-name>
 az group create -n $RG -l $LOC
 az acr create -n $ACR -g $RG --sku Basic
 az containerapp env create -n cae-paper-trading -g $RG -l $LOC
-az acr build -r $ACR -t paper-trading-api:initial -f src/PaperTrading.Api/Dockerfile .
+az acr login -n $ACR
+docker build -f src/PaperTrading.Api/Dockerfile -t $ACR.azurecr.io/paper-trading-api:initial .
+docker push $ACR.azurecr.io/paper-trading-api:initial
 az containerapp create -n ca-paper-trading-api -g $RG --environment cae-paper-trading \
   --image $ACR.azurecr.io/paper-trading-api:initial --registry-server $ACR.azurecr.io --registry-identity system \
   --target-port 8080 --ingress external --min-replicas 1 --max-replicas 1 \
@@ -243,17 +247,27 @@ az staticwebapp create -n swa-paper-trading -g $RG -l $LOC --sku Free
 ```
 
 ### Deployment status
-_To be filled in at submission time._
+| Part | URL |
+|---|---|
+| Web app (Static Web Apps, Free) | https://ambitious-stone-0339e7400.2.azurestaticapps.net |
+| API (Container Apps, North Europe, 1 replica) | https://ca-paper-trading-api.thankfulgrass-5425d485.northeurope.azurecontainerapps.io |
+| API docs / test page | `<api-url>/scalar` · OpenAPI JSON at `<api-url>/openapi/v1.json` |
+
+Notes: the live API uses real Binance prices (Auto mode). Its SQLite file lives in the container, so data resets when
+a new revision is deployed (see trade-offs).
 
 ---
 
 ## 9. AI usage (transparency)
-_To be finalized by the author at submission time._
+I used an AI coding assistant (**Claude Code**, by Anthropic) heavily throughout this project.
 
-This project was built with an AI coding assistant (Claude Code). Summary of how it was used:
-- **Code generation:** the assistant wrote most of the code (domain engine, API, tests, frontend, Docker/CI files) and
-  this README, working step by step from my requirements and priorities.
-- **My role:** I set the plan and priorities, reviewed each step, challenged design decisions (e.g. I questioned the
-  single-writer queue vs a lock — the comparison is documented in §4.3), ran the tests and tested the API and UI by hand,
-  and made the final decisions on trade-offs.
-- **Verification:** every behavior claimed here is covered by an automated test or was checked manually.
+- **What the AI did:** wrote the large majority of the code — the domain engine, API, tests, React frontend,
+  Dockerfiles, CI/CD workflow and Azure setup scripts — and drafted this README.
+- **What I did:** set the plan and priorities against the evaluation criteria; reviewed and tested each step before
+  moving on; challenged design decisions (e.g. I questioned the single-writer queue versus a simple lock — see §4.3);
+  created and connected the Azure and GitHub accounts; approved every push and deployment; and tested the API (Scalar)
+  and the UI by hand, locally and on Azure.
+- **How it was verified:** 79 backend and 7 frontend automated tests run in CI on every push, plus manual end-to-end
+  checks on the live deployment.
+- **Ownership:** I have reviewed the full codebase. This is my submission: I put my name behind it and I am
+  accountable for every part of it — its design, its trade-offs and its correctness.

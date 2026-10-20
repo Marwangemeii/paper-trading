@@ -11,6 +11,7 @@ TestResults/
 # Node
 node_modules/
 dist/
+dist-*/
 .vite/
 
 # Editors / OS
