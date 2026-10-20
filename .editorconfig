@@ -1,0 +1,17 @@
+root = true
+
+[*]
+indent_style = space
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,csproj,props}]
+indent_size = 4
+
+[*.{ts,tsx,js,json,yml,yaml,css,html}]
+indent_size = 2
+
+# Test names read as sentences (Method_does_thing_when_condition).
+[tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none

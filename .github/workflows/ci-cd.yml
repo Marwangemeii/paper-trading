@@ -1,0 +1,100 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend build & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet test --no-build -c Release --logger "trx" --results-directory TestResults
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: TestResults
+
+  frontend:
+    name: Frontend lint & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test --if-present
+      - run: npm run build
+
+  deploy:
+    name: Deploy to Azure
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AZURE_RESOURCE_GROUP != ''
+    runs-on: ubuntu-latest
+    environment: production
+    # OIDC: GitHub proves its identity to Azure with a short-lived token, so no Azure password is stored anywhere.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Built on the runner and pushed with an Entra ID token (ACR Tasks are not available on trial subscriptions).
+      - name: Build and push API image
+        run: |
+          IMAGE="${{ vars.AZURE_ACR_NAME }}.azurecr.io/paper-trading-api:${{ github.sha }}"
+          az acr login --name "${{ vars.AZURE_ACR_NAME }}"
+          docker build -f src/PaperTrading.Api/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Roll out new API revision
+        run: |
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINERAPP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ vars.AZURE_ACR_NAME }}.azurecr.io/paper-trading-api:${{ github.sha }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build web app
+        working-directory: web
+        env:
+          VITE_API_URL: ${{ vars.API_PUBLIC_URL }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy web app to Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: web/dist
+          skip_app_build: true

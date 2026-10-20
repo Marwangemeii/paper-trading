@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PaperTrading.Api/PaperTrading.Api.csproj" />
+    <Project Path="src/PaperTrading.Domain/PaperTrading.Domain.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PaperTrading.Api.Tests/PaperTrading.Api.Tests.csproj" />
+    <Project Path="tests/PaperTrading.Domain.Tests/PaperTrading.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

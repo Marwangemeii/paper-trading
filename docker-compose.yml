@@ -1,0 +1,27 @@
+# Runs the whole app locally: http://localhost:5173 (web) and http://localhost:5080/scalar (API).
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/PaperTrading.Api/Dockerfile
+    ports:
+      - "5080:8080"
+    environment:
+      Cors__AllowedOrigins__0: http://localhost:5173
+      PriceFeed__Mode: Auto
+    volumes:
+      - trading-data:/app/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_API_URL: http://localhost:5080
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  trading-data:
